@@ -1,0 +1,63 @@
+plugins { id 'java' }
+repositories {
+    maven { url = 'https://repo.runelite.net'; content { includeGroupByRegex('net\\.runelite.*') } }
+    mavenCentral()
+}
+def runeLiteVersion = '1.13.1'
+dependencies {
+    compileOnly "net.runelite:client:${runeLiteVersion}"
+    testImplementation "net.runelite:client:${runeLiteVersion}"
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:4.11.0'
+}
+// Security versions for compilation/tests only. The plugin JAR bundles none of these.
+// Normal RuneLite controls its own runtime; this project cannot patch the host.
+configurations.configureEach {
+    resolutionStrategy.force(
+        'ch.qos.logback:logback-classic:1.5.34',
+        'ch.qos.logback:logback-core:1.5.34',
+        'com.google.code.gson:gson:2.8.9',
+        'com.google.guava:guava:32.0.1-jre',
+        'com.google.protobuf:protobuf-javalite:3.25.5',
+        'com.squareup.okhttp3:okhttp:4.12.0',
+        'com.squareup.okio:okio:3.6.0',
+        'org.slf4j:slf4j-api:2.0.17',
+        'org.apache.commons:commons-lang3:3.18.0',
+        'org.json:json:20231013'
+    )
+}
+group = 'fi.companion'
+version = '0.2.3'
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.release.set(11) }
+tasks.withType(Test).configureEach {
+    testLogging { events 'passed', 'skipped', 'failed'; exceptionFormat 'short' }
+}
+tasks.named('test') { exclude '**/WindowsSecurityTest.class' }
+tasks.register('windowsSecurityTest', Test) {
+    description = 'Real Windows ADS, junction, lock and incomplete-log checks; temporary data only.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/WindowsSecurityTest.class'
+    doFirst {
+        if (!System.getProperty('os.name').startsWith('Windows')) {
+            throw new GradleException('Real Windows required; Windows Bridge checks NOT completed')
+        }
+    }
+}
+
+dependencyLocking { lockAllConfigurations(); lockMode = LockMode.STRICT }
+configurations.configureEach {
+    resolutionStrategy.eachDependency { details ->
+        def requested = details.requested.version
+        if (requested != null && (requested.contains('+') || requested.startsWith('latest.')
+                || requested.contains('SNAPSHOT') || requested.contains('[') || requested.contains('('))) {
+            throw new GradleException('Dynamic/changing dependency blocked: ' + details.requested)
+        }
+    }
+}
+// Resolve all runnable/test configurations when preparing lock and verification files.
+tasks.register('resolveSecurityDependencies') {
+    doLast {
+        configurations.findAll { it.canBeResolved }.each { it.resolve() }
+    }
+}

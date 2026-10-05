@@ -1,0 +1,12 @@
+/.gradle/
+/build/
+/.idea/
+*.iml
+credentials.properties
+*.jsonl
+session.json
+character.json
+bank.json
+inventory.json
+equipment.json
+bridge-testitulokset.txt
