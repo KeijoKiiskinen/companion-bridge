@@ -22,11 +22,25 @@ public class WindowsSecurityTest {
 
     @Test public void alternateDataStreamRejected() throws Exception {
         Path base = temporary.getRoot().toPath().resolve("base.jsonl");
-        Path stream = Path.of(base.toString() + ":bridge-test");
-        Files.writeString(base, "original\n"); Files.writeString(stream, "test stream");
-        assertEquals("test stream", Files.readString(stream));
-        try { PickupLogWriter.append(stream, "new\n"); fail("ADS accepted"); }
+        String streamName = base.toString() + ":bridge-test";
+        Files.writeString(base, "original\n");
+        // java.nio.Path rejects ':' on Windows before a stream can be opened.
+        // java.io supports real ADS: create and read the test fixture first.
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(streamName)) {
+            out.write("test stream".getBytes(StandardCharsets.UTF_8));
+        }
+        try (java.io.FileInputStream in = new java.io.FileInputStream(streamName)) {
+            assertEquals("test stream", new String(in.readAllBytes(), StandardCharsets.UTF_8));
+        }
+        try { PickupLogWriter.append(Path.of(streamName), "new\n"); fail("ADS accepted"); }
+        catch (java.nio.file.InvalidPathException expected) {
+            // Correct first-layer rejection by the Windows NIO path parser.
+            assertEquals(streamName, expected.getInput());
+        }
         catch (IOException expected) { assertEquals("unsafe_path", expected.getMessage()); }
+        try (java.io.FileInputStream in = new java.io.FileInputStream(streamName)) {
+            assertEquals("test stream", new String(in.readAllBytes(), StandardCharsets.UTF_8));
+        }
         assertEquals("original\n", Files.readString(base));
     }
 
